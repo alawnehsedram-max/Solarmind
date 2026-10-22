@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
 
 void main() {
   runApp(const SolarMindApp());
@@ -42,7 +45,7 @@ class SolarMindLogo extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF1B000).withOpacity(0.2),
+            color: const Color(0xFFF1B000).withValues(alpha: 0.2),
             blurRadius: 12,
             spreadRadius: 2,
             offset: const Offset(0, 4),
@@ -157,7 +160,7 @@ class WelcomeScreen extends StatelessWidget {
       height: 10,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive ? primaryGold : primaryGold.withOpacity(0.3),
+        color: isActive ? primaryGold : primaryGold.withValues(alpha: 0.3),
       ),
     );
   }
@@ -200,7 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: primaryGold.withOpacity(0.5)),
+                          border: Border.all(color: primaryGold.withValues(alpha: 0.5)),
                         ),
                         child: const Icon(Icons.arrow_back, color: darkGreen, size: 20),
                       ),
@@ -348,7 +351,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: primaryGold.withOpacity(0.5)),
+                          border: Border.all(color: primaryGold.withValues(alpha: 0.5)),
                         ),
                         child: const Icon(Icons.arrow_back, color: darkGreen, size: 20),
                       ),
@@ -485,7 +488,7 @@ class VerificationScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: primaryGold.withOpacity(0.5)),
+                          border: Border.all(color: primaryGold.withValues(alpha: 0.5)),
                         ),
                         child: const Icon(Icons.arrow_back, color: darkGreen, size: 20),
                       ),
@@ -496,7 +499,7 @@ class VerificationScreen extends StatelessWidget {
                 const Text('رمز التحقق', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: darkGreen)),
                 const SizedBox(height: 10),
                 const Text(
-                  'أرسلنا رمز التحقق على رقم هاتفك الذي ينتهي بـ 56\nأدخله الآن',
+                  'أرسلنا رمز التحقق على رقم هاتفك الذي ينتهي بـ 56\nأدخل الآن',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
                 ),
@@ -562,11 +565,113 @@ class VerificationScreen extends StatelessWidget {
 // ==========================================
 // 5. الواجهة الرئيسية (Home Screen)
 // ==========================================
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   static const Color darkGreen = Color(0xFF1B4D2E);
   static const Color primaryGold = Color(0xFFF1B000);
+
+  // المتغيرات الحية القادمة من الباكيند
+  String _temp = '--°';
+  String _weatherAdvice = 'جاري جلب بيانات الطقس لجنين...';
+  bool _isLoadingWeather = true;
+
+  double _batteryLevel = 0.78;
+  String _batteryText = '78%';
+  String _consumptionText = '3.2 kW';
+  String _statusText = 'ممتازة';
+  
+  Timer? _dataTimer;
+
+  // رابط الباكيند للتشغيل على الكروم
+  final String _baseUrl = 'http://127.0.0.1:8000';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchJeninWeather();
+    _fetchSolarData();
+
+    // تحديث البيانات الحية كل 5 ثوانٍ
+    _dataTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _fetchSolarData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _dataTimer?.cancel();
+    super.dispose();
+  }
+
+  // دالة جلب الطقس من سيرفر الباكيند
+  Future<void> _fetchJeninWeather() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/weather'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final double tempVal = (data['temperature_celcius'] as num).toDouble();
+        final String location = data['location'] ?? 'جنين، فلسطين';
+
+        setState(() {
+          _temp = '${tempVal.round()}°';
+          _weatherAdvice = 'طاقة شمسية مناسبة في $location';
+          _isLoadingWeather = false;
+        });
+      } else {
+        setState(() {
+          _temp = '25°';
+          _weatherAdvice = 'طاقة شمسية قوية الآن في جنين';
+          _isLoadingWeather = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _temp = '25°';
+        _weatherAdvice = 'طاقة شمسية قوية الآن في جنين';
+        _isLoadingWeather = false;
+      });
+    }
+  }
+
+  // دالة جلب بيانات الطاقة الشمسية والبطارية من الباكيند
+  Future<void> _fetchSolarData() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/api/get-solar/DEV_JENIN_01'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final double battery = (data['battery_level'] as num).toDouble();
+        final double consumption = (data['consumption'] as num).toDouble();
+        final String status = data['status'] ?? 'ممتازة';
+
+        setState(() {
+          _batteryLevel = battery / 100.0;
+          _batteryText = '${battery.round()}%';
+          _consumptionText = '$consumption kW';
+          _statusText = status;
+        });
+      }
+    } catch (e) {
+      // إبقاء القيم الافتراضية
+    }
+  }
+
+  void _showAiAssistantSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const Directionality(
+        textDirection: TextDirection.rtl,
+        child: AiAssistantBottomSheet(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -574,7 +679,6 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // الهيدر العلوي الأخضر
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
@@ -589,7 +693,6 @@ class HomeScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // أيقونة الجرس المخصصة
                       Container(
                         width: 42,
                         height: 42,
@@ -628,9 +731,9 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      _buildTopCard('الشحـن', '78%'),
+                      _buildTopCard('الشحـن', _batteryText),
                       const SizedBox(width: 10),
-                      _buildTopCard('اليوم', '3.2 kW'),
+                      _buildTopCard('اليوم', _consumptionText),
                       const SizedBox(width: 10),
                       _buildTopCard('توفيـر', '12 ₪'),
                     ],
@@ -638,13 +741,10 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-
-            // محتوى الصفحة
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // بطاقة حالة البطارية
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -661,7 +761,7 @@ class HomeScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               decoration: BoxDecoration(color: darkGreen, borderRadius: BorderRadius.circular(20)),
-                              child: const Text('ممتازة', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              child: Text(_statusText, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                             ),
                             Row(
                               children: [
@@ -673,7 +773,7 @@ class HomeScreen extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: primaryGold.withOpacity(0.5)),
+                                    border: Border.all(color: primaryGold.withValues(alpha: 0.5)),
                                   ),
                                   child: ClipOval(
                                     child: Padding(
@@ -691,13 +791,12 @@ class HomeScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // شريط تقدم ملون من اليمين إلى اليسار (RTL)
                         Directionality(
                           textDirection: TextDirection.rtl,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
-                              value: 0.78,
+                              value: _batteryLevel,
                               minHeight: 10,
                               backgroundColor: Colors.grey.shade300,
                               valueColor: const AlwaysStoppedAnimation<Color>(primaryGold),
@@ -705,7 +804,6 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // النص محاذى جهة اليمين تماماً
                         const Align(
                           alignment: Alignment.centerRight,
                           child: Text(
@@ -718,8 +816,6 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // بطاقة الاستهلاك اليومي
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -733,7 +829,7 @@ class HomeScreen extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('3.2 kW • أمس 2.9', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('$_consumptionText • أمس 2.9', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                             const Text('الاستهلاك اليومي', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: darkGreen)),
                           ],
                         ),
@@ -758,8 +854,6 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // بطاقة الطقس
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -771,14 +865,28 @@ class HomeScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Icon(Icons.arrow_back, color: darkGreen, size: 20),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: const [
-                            Text('غداً غائم، يُفضل الشحن اليوم', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: darkGreen)),
-                            SizedBox(height: 4),
-                            Text('• 27° • طاقة شمسية قوية الآن', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                _isLoadingWeather ? 'جاري التحميل...' : _weatherAdvice,
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: darkGreen),
+                              ),
+                              const SizedBox(height: 4),
+                              Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Text(
+                                  '$_temp • طاقة شمسية في جنين',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 10),
                         Container(
                           width: 44,
                           height: 44,
@@ -796,8 +904,6 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-
-            // الشريط السفلي وزر المساعد الذكي
             Stack(
               clipBehavior: Clip.none,
               alignment: Alignment.topCenter,
@@ -806,7 +912,7 @@ class HomeScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -835,7 +941,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                // زر المساعد العائم
                 Positioned(
                   top: -26,
                   child: GestureDetector(
@@ -849,7 +954,7 @@ class HomeScreen extends StatelessWidget {
                         border: Border.all(color: primaryGold, width: 2.5),
                         boxShadow: [
                           BoxShadow(
-                            color: primaryGold.withOpacity(0.4),
+                            color: primaryGold.withValues(alpha: 0.4),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           )
@@ -881,7 +986,7 @@ class HomeScreen extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -905,127 +1010,253 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  void _showAiAssistantSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+// ==========================================
+// 6. ودجت المساعد الذكي التفاعلي (AI Chat Bot Sheet)
+// ==========================================
+class AiAssistantBottomSheet extends StatefulWidget {
+  const AiAssistantBottomSheet({super.key});
+
+  @override
+  State<AiAssistantBottomSheet> createState() => _AiAssistantBottomSheetState();
+}
+
+class _AiAssistantBottomSheetState extends State<AiAssistantBottomSheet> {
+  static const Color darkGreen = Color(0xFF1B4D2E);
+  static const Color primaryGold = Color(0xFFF1B000);
+
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  final List<Map<String, String>> _messages = [
+    {
+      'sender': 'ai',
+      'text': 'أهلاً بك في سولار مايند! أنا مساعدك الذكي، يمكنني مساعدتك في فهم استهلاكك وتوفير الطاقة. ماذا تحب أن تعرف؟'
+    }
+  ];
+
+  // دالة الإرسال المعدلة للربط مع سيرفر الباكيند
+  Future<void> _sendMessage(String query) async {
+    if (query.trim().isEmpty) return;
+
+    setState(() {
+      _messages.add({'sender': 'user', 'text': query});
+    });
+
+    _textController.clear();
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/ai-chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'question': query}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        String aiReply = data['reply'] ?? 'عذراً، لم أستطع معالجة طلبك.';
+        
+        setState(() {
+          _messages.add({'sender': 'ai', 'text': aiReply});
+        });
+      } else {
+        setState(() {
+          _messages.add({'sender': 'ai', 'text': 'عذراً، حدث خطأ في الاتصال بالمساعد الذكي.'});
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add({'sender': 'ai', 'text': 'تعذر الاتصال بالخادم، تأكد من تشغيل الباكيند.'});
+      });
+    }
+
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: darkGreen,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
             ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: darkGreen,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                    child: const Icon(Icons.close, color: Colors.white, size: 18),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Row(
                   children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                        child: const Icon(Icons.close, color: Colors.white, size: 18),
-                      ),
-                    ),
-                    Row(
-                      children: const [
-                        Text('مساعد سولار مايند الذكي', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        SizedBox(width: 10),
-                        Icon(Icons.psychology, color: primaryGold, size: 24),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF4F9F4),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFD4E7D4)),
-                      ),
-                      child: const Text(
-                        'أهلاً بك في سولار مايند! أنا مساعدك الذكي، يمكنني مساعدتك في فهم استهلاكك وتوفير الطاقة. ماذا تحب أن تعرف؟',
-                        style: TextStyle(fontSize: 14, height: 1.5, color: darkGreen),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text('أسئلة سريعة:', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: const [
-                        _ChipButton('ما حجم استهلاك اليوم؟'),
-                        _ChipButton('متى ستنفد البطارية؟'),
-                        _ChipButton('كيف يمكنني توفير الطاقة؟'),
-                        _ChipButton('ما هي حالة الطقس غداً؟'),
-                        _ChipButton('ما هو الجهاز الأكثر استهلاكاً؟'),
-                        _ChipButton('كيف يمكنني إيقاف تشغيل الأجهزة عن بُعد؟'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(color: darkGreen, shape: BoxShape.circle),
-                      child: const Icon(Icons.send, color: Colors.white, size: 18),
-                    ),
+                    const Text('مساعد سولار مايند الذكي', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        textAlign: TextAlign.right,
-                        decoration: InputDecoration(
-                          hintText: 'اسأل مساعد سولار مايند...',
-                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: primaryGold)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: primaryGold, width: 2)),
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: ClipOval(
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Image.asset(
+                            'assets/ai_brain_icon.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (c, e, s) => const Icon(Icons.psychology, color: primaryGold, size: 20),
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          Expanded(
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: ListView(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  ..._messages.map((msg) {
+                    bool isUser = msg['sender'] == 'user';
+                    return Align(
+                      alignment: isUser ? Alignment.centerLeft : Alignment.centerRight,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                        decoration: BoxDecoration(
+                          color: isUser ? primaryGold : const Color(0xFFF4F9F4),
+                          borderRadius: BorderRadius.circular(16),
+                          border: isUser ? null : Border.all(color: const Color(0xFFD4E7D4)),
+                        ),
+                        child: Text(
+                          msg['text']!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.4,
+                            color: isUser ? darkGreen : darkGreen,
+                            fontWeight: isUser ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 10),
+                  const Text('أسئلة سريعة:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildClickableChip('ما حجم استهلاك اليوم؟'),
+                      _buildClickableChip('متى ستنفد البطارية؟'),
+                      _buildClickableChip('كيف يمكنني توفير الطاقة؟'),
+                      _buildClickableChip('ما هي حالة الطقس غداً؟'),
+                      _buildClickableChip('ما هو الجهاز الأكثر استهلاكاً؟'),
+                      _buildClickableChip('كيف يمكنني إيقاف تشغيل الأجهزة عن بُعد؟'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _sendMessage(_textController.text),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(color: darkGreen, shape: BoxShape.circle),
+                    child: const Icon(Icons.send, color: Colors.white, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    textAlign: TextAlign.right,
+                    onSubmitted: (val) => _sendMessage(val),
+                    decoration: InputDecoration(
+                      hintText: 'اسأل مساعد سولار مايند...',
+                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: primaryGold)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: primaryGold, width: 2)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClickableChip(String text) {
+    return GestureDetector(
+      onTap: () => _sendMessage(text),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: primaryGold),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 13, color: darkGreen, fontWeight: FontWeight.w500),
         ),
       ),
     );
   }
 }
 
-// عنصر مخصص لأيقونات الشريط السفلي
 class _BottomCustomNavItem extends StatelessWidget {
   final String assetPath;
   final IconData fallbackIcon;
@@ -1064,24 +1295,6 @@ class _BottomCustomNavItem extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ChipButton extends StatelessWidget {
-  final String text;
-  const _ChipButton(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFF1B000)),
-      ),
-      child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF1B4D2E), fontWeight: FontWeight.w500)),
     );
   }
 }
