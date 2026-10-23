@@ -262,14 +262,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () {},
-                    child: const Text('هل نسيت كلمة السر؟', style: TextStyle(color: darkGreen, fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                ),
                 const SizedBox(height: 40),
                 SizedBox(
                   width: double.infinity,
@@ -615,7 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final response = await http.get(Uri.parse('$_baseUrl/weather'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final double tempVal = (data['temperature_celcius'] as num).toDouble();
+        final double tempVal = (data['temperature_celsius'] as num).toDouble();
         final String location = data['location'] ?? 'جنين، فلسطين';
 
         setState(() {
